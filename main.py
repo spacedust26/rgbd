@@ -77,7 +77,8 @@ class RGBDCollectorApp:
                     rgb = frame_to_bgr_image(color_frame)
                     self.current_frame = rgb.copy()
 
-                    img = Image.fromarray(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
+                    preview = cv2.resize(rgb, (960, 540), interpolation=cv2.INTER_AREA)
+                    img = Image.fromarray(cv2.cvtColor(preview, cv2.COLOR_BGR2RGB)) 
                     imgtk = ImageTk.PhotoImage(image=img)
                     self.video_label.imgtk = imgtk  # Keep a reference!
                     self.video_label.configure(image=imgtk)
@@ -94,7 +95,7 @@ class RGBDCollectorApp:
         if color_frame is None or depth_frame is None:
             print("[ERROR] No frame available to capture")
             return
-    
+
         rgb = frame_to_bgr_image(color_frame)
         depth = np.frombuffer(depth_frame.get_data(), dtype=np.uint16).reshape(
             (depth_frame.get_height(), depth_frame.get_width())
@@ -106,13 +107,24 @@ class RGBDCollectorApp:
         self.captured_depth = depth
         self.captured_mask = mask
 
-        # Show side-by-side RGB and mask visualization
+        # Prepare visuals
         mask_viz = (mask * 255).astype(np.uint8)
         mask_bgr = cv2.cvtColor(mask_viz, cv2.COLOR_GRAY2BGR)
-        # Resize mask to match RGB dimensions
-        mask_bgr_resized = cv2.resize(mask_bgr, (rgb.shape[1], rgb.shape[0]), interpolation=cv2.INTER_NEAREST)
 
-        combined = np.hstack((rgb, mask_bgr_resized))
+        # Normalize and colorize depth for display
+        depth_vis = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
+
+        # Resize all visuals to same size
+        display_width = 320
+        display_height = 240
+        rgb_resized = cv2.resize(rgb, (display_width, display_height))
+        mask_resized = cv2.resize(mask_bgr, (display_width, display_height))
+        depth_resized = cv2.resize(depth_colored, (display_width, display_height))
+
+        # Combine: [RGB | Mask | Depth]
+        combined = np.hstack((rgb_resized, mask_resized, depth_resized))
+
         img = Image.fromarray(cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
         imgtk = ImageTk.PhotoImage(image=img)
         self.video_label.imgtk = imgtk  # Keep a reference!
@@ -123,6 +135,7 @@ class RGBDCollectorApp:
         self.save_btn.config(state=tk.NORMAL)
         self.retake_btn.config(state=tk.NORMAL)
         print("[INFO] Frame captured. Press Save or Retake.")
+
 
     def save_data(self):
         if self.captured_rgb is None or self.captured_mask is None:
@@ -164,3 +177,4 @@ if __name__ == "__main__":
         root.mainloop()
     except Exception as e:
         print(f"[FATAL ERROR] {e}")
+
