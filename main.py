@@ -45,6 +45,11 @@ class RGBDCollectorApp:
 
         self.video_label = tk.Label(self.video_frame)
         self.video_label.pack()
+        self.class_var = tk.IntVar(value=0)  # Default class: 0 (Copper)
+        tk.Label(self.btn_frame, text="Class:").grid(row=1, column=0)
+        self.class_selector = tk.OptionMenu(self.btn_frame, self.class_var, 0, 1)
+        self.class_selector.grid(row=1, column=1)
+        tk.Label(self.btn_frame, text="(0: Copper, 1: Steel)").grid(row=1, column=2, columnspan=2)
 
         self.capture_btn = tk.Button(self.btn_frame, text="Capture (Enter)", command=self.capture_frame)
         self.capture_btn.grid(row=0, column=0, padx=5)
@@ -107,11 +112,17 @@ class RGBDCollectorApp:
         self.captured_depth = depth
         self.captured_mask = mask
 
-        # Prepare visuals
+        # Convert binary mask to 3-channel BGR
         mask_viz = (mask * 255).astype(np.uint8)
         mask_bgr = cv2.cvtColor(mask_viz, cv2.COLOR_GRAY2BGR)
 
-        # Normalize and colorize depth for display
+        # Draw contour polygon on the mask
+        contours, _ = cv2.findContours(mask_viz, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest = max(contours, key=cv2.contourArea)
+            cv2.drawContours(mask_bgr, [largest], -1, (0, 255, 0), 2)  # Green outline
+
+        # Normalize and colorize depth
         depth_vis = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
 
@@ -122,20 +133,20 @@ class RGBDCollectorApp:
         mask_resized = cv2.resize(mask_bgr, (display_width, display_height))
         depth_resized = cv2.resize(depth_colored, (display_width, display_height))
 
-        # Combine: [RGB | Mask | Depth]
+        # Combine visuals: [RGB | Mask+Polygon | Depth]
         combined = np.hstack((rgb_resized, mask_resized, depth_resized))
 
+        # Show in tkinter
         img = Image.fromarray(cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
         imgtk = ImageTk.PhotoImage(image=img)
-        self.video_label.imgtk = imgtk  # Keep a reference!
+        self.video_label.imgtk = imgtk
         self.video_label.configure(image=imgtk)
 
         self.is_capturing = False
         self.capture_btn.config(state=tk.DISABLED)
         self.save_btn.config(state=tk.NORMAL)
         self.retake_btn.config(state=tk.NORMAL)
-        print("[INFO] Frame captured. Press Save or Retake.")
-
+        print(f"[INFO] Frame captured for class: {self.class_var.get()} — Press Save or Retake.")
 
     def save_data(self):
         if self.captured_rgb is None or self.captured_mask is None:
@@ -145,7 +156,14 @@ class RGBDCollectorApp:
         img_name = f"img{self.counter:04d}"
         cv2.imwrite(str(self.img_dir / f"{img_name}.jpg"), self.captured_rgb)
         np.save(str(self.depth_dir / f"{img_name}.npy"), self.captured_depth)
-        self.writer.write(str(self.label_dir / f"{img_name}.txt"), self.captured_mask, self.captured_rgb.shape[:2])
+        selected_class = self.class_var.get()
+        self.writer.write(
+            str(self.label_dir / f"{img_name}.txt"),
+            self.captured_mask,
+            self.captured_rgb.shape[:2],
+            label_class=selected_class
+        )
+
         print(f"[SAVED] {img_name}")
 
         self.counter += 1
@@ -177,4 +195,3 @@ if __name__ == "__main__":
         root.mainloop()
     except Exception as e:
         print(f"[FATAL ERROR] {e}")
-

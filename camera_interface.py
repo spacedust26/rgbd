@@ -16,7 +16,6 @@ class CameraInterface:
         print("Selected color format:", color_profile.get_format())
 
 
-
         depth_profiles = self.pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
         depth_profile = depth_profiles.get_default_video_stream_profile()
         self.config.enable_stream(depth_profile)
