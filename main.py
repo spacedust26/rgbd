@@ -17,7 +17,13 @@ class RGBDCollectorApp:
 
         self.cam = CameraInterface()
         self.cam.setup_streams()
-        self.seg = SegmentationHelper(min_depth=300, max_depth=1200)
+        self.seg = SegmentationHelper(
+            min_depth=300,
+            max_depth=380,
+            roi_ratio=0.7,     # Focus only on the center region
+            min_area=800,      # Avoid small noise
+            max_area=50000     # Avoid huge background
+        )
         self.writer = AnnotationWriter(label_class=0)
 
         # Setup dataset directories
@@ -105,6 +111,8 @@ class RGBDCollectorApp:
         depth = np.frombuffer(depth_frame.get_data(), dtype=np.uint16).reshape(
             (depth_frame.get_height(), depth_frame.get_width())
         )
+        depth_center = depth[depth.shape[0] // 2, depth.shape[1] // 2]
+        print(f"[DEBUG] Center pixel depth: {depth_center} mm")
 
         mask = self.seg.segment(depth)
 
@@ -122,13 +130,15 @@ class RGBDCollectorApp:
             largest = max(contours, key=cv2.contourArea)
             cv2.drawContours(mask_bgr, [largest], -1, (0, 255, 0), 2)  # Green outline
 
+        print(f"[DEBUG] {len(contours)} contours found in ROI")
+
         # Normalize and colorize depth
         depth_vis = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         depth_colored = cv2.applyColorMap(depth_vis, cv2.COLORMAP_JET)
 
         # Resize all visuals to same size
-        display_width = 320
-        display_height = 240
+        display_width =480
+        display_height = 260
         rgb_resized = cv2.resize(rgb, (display_width, display_height))
         mask_resized = cv2.resize(mask_bgr, (display_width, display_height))
         depth_resized = cv2.resize(depth_colored, (display_width, display_height))
