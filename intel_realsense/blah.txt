@@ -1,0 +1,2 @@
+python3.10 -m venv ~/realsense-venv
+source ~/realsense-venv/bin/activate
